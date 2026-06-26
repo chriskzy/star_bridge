@@ -1,0 +1,21 @@
+.venv/
+bin/
+*.o
+*.log
+.smoke-server.log
+.phase1-server.log
+.phase2-server.log
+.phase2-spawn-server.log
+.phase2-lifecycle-server.log
+config.json
+node_modules/
+browser_state/
+snapshots/
+# Test artifact binaries and debug bundles (no extension = compiled binary)
+tests/test_[a-z]*[^hc]
+tests/config_validation_test
+tests/fake_uds_agent
+tests/usage_normalization_test
+*.dSYM/
+__pycache__/
+tests/.out/

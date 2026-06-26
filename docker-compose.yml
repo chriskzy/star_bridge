@@ -1,0 +1,44 @@
+# ------------------------------------------------------------------ #
+#  docker-compose.yml — local development environment for star_bridge  #
+# ------------------------------------------------------------------ #
+
+version: "3.9"
+
+services:
+  star-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${CODEX_PORT:-8080}:8080"
+    environment:
+      CODEX_CONFIG_PATH: /app/config/codex_config.json
+      CODEX_PORT: 8080
+      CODEX_AUTH_TOKEN: "${CODEX_AUTH_TOKEN:-dev-token-12345}"
+      CODEX_LOG_LEVEL: "${CODEX_LOG_LEVEL:-info}"
+    volumes:
+      # Mount config for live edits
+      - ./config:/app/config:ro
+      # Mount logs for visibility
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "bash", "scripts/healthcheck.sh"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # Optional: test runner service
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["bash", "-c", "make test-runner"]
+    depends_on:
+      star-bridge:
+        condition: service_healthy
+    environment:
+      STAR_BRIDGE_URL: "http://star-bridge:8080"
+    profiles:
+      - test

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libcjson-dev zlib1g-dev python3 python3-venv
+
+      - name: Build
+        run: make clean && make
+
+      - name: Sanitize gate — no tracked Mach-O, __pycache__, dSYM, chriskz, /Users/
+        run: |
+          echo "=== Sanitize gate ==="
+          # Check for tracked Mach-O binaries
+          MACHO=$(git ls-files | xargs -I {} sh -c 'file -b {} 2>/dev/null | grep -q "Mach-O" && echo {}') || true
+          if [ -n "$MACHO" ]; then echo "FAIL: tracked Mach-O files: $MACHO"; exit 1; fi
+          # Check for tracked __pycache__ entries
+          PYCACHE=$(git ls-files | grep -E '__pycache__' || true)
+          if [ -n "$PYCACHE" ]; then echo "FAIL: tracked __pycache__: $PYCACHE"; exit 1; fi
+          # Check for tracked *.dSYM entries
+          DSYM=$(git ls-files | grep -E '\.dSYM' || true)
+          if [ -n "$DSYM" ]; then echo "FAIL: tracked .dSYM: $DSYM"; exit 1; fi
+          # Check for local usernames/paths in tracked publish files. Archive and
+          # release-checklist docs never ship in the release copy.
+          PUBLISH=$(git ls-files | grep -vE '\.github/|^archive/|RELEASE_VERIFICATION\.md$')
+          CHRIS=$(echo "$PUBLISH" | xargs git grep -I --fixed-strings 'chriskz' -- 2>/dev/null || true)
+          if [ -n "$CHRIS" ]; then echo "FAIL: tracked files contain 'chriskz': $CHRIS"; exit 1; fi
+          # Check for '/Users/' in tracked files (non-binary)
+          USERS=$(echo "$PUBLISH" | xargs git grep -I --fixed-strings '/Users/' -- 2>/dev/null || true)
+          if [ -n "$USERS" ]; then echo "FAIL: tracked files contain '/Users/': $USERS"; exit 1; fi
+          echo "Sanitize gate passed."
+
+      - name: Run CI test suite
+        run: make ci
+
+      - name: Show test summary
+        run: |
+          echo "CI completed successfully"
+          echo "Binary: bin/star_bridge"
+
+  macos-build-and-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cjson zlib python3
+          python3 -m ensurepip
+
+      - name: Build
+        run: make clean && make
+
+      - name: Run CI test suite
+        run: make ci
+
+      - name: Show test summary
+        run: |
+          echo "macOS CI completed successfully"
+          echo "Binary: bin/star_bridge"

@@ -1,0 +1,18 @@
+# ------------------------------------------------------------------ #
+#  .dockerignore — files to exclude from Docker build context          #
+# ------------------------------------------------------------------ #
+
+.git
+.gitignore
+*.md
+*.log
+*.out
+bin/
+tests/
+logs/
+.venv/
+vendor/unity/
+vendor/cjson/*.o
+*.o
+*.a
+.DS_Store
