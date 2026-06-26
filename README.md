@@ -1,6 +1,6 @@
 # Star Bridge
 
-Local-first bridge for running a ds4-backed coding agent from the Codex desktop app.
+Local-first bridge for running a ds4 native agent from the Codex desktop app.
 
 Star Bridge is a small native gateway that exposes the OpenAI Responses API shape Codex expects, routes requests into a local ds4 runtime, and keeps Codex compatibility, native-agent transport, logging, and optional tool handling in one inspectable C codebase. The primary binary is `bin/star_bridge` (a `bin/codex_bridge` compatibility symlink is kept for one alpha).
 
