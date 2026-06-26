@@ -2,6 +2,8 @@
 
 Local-first bridge for running a ds4 native agent from the Codex desktop app.
 
+ds4 native agent is really powerful (https://github.com/antirez/ds4), the purpose of this bridge is to allow transport in/out to the native agent acrross a bridge the primary target being codex.  
+
 Star Bridge is a small native gateway that exposes the OpenAI Responses API shape Codex expects, routes requests into a local ds4 runtime, and keeps Codex compatibility, native-agent transport, logging, and optional tool handling in one inspectable C codebase. The primary binary is `bin/star_bridge` (a `bin/codex_bridge` compatibility symlink is kept for one alpha).
 
 > Status: alpha. The bridge builds and has a growing regression suite, but the real ds4-agent workflow still needs wider validation before a stable public release.
