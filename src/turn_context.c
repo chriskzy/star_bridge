@@ -46,6 +46,28 @@ void turn_context_init(TurnContext *ctx, BridgeEngine *eng, unsigned long reques
     ctx->delta_seq = 0;
     ctx->stream_state = stream_state;
     ctx->event_limit_exceeded = false;
+    ctx->tool_calls = 0;
+    clock_gettime(CLOCK_MONOTONIC, &ctx->start_ts);
+}
+
+/* Emit a single structured analytics line per turn outcome. Consumed by
+ * scripts/analytics.py to report latency, throughput (tk/s), tool usage, and
+ * steering (reasoning_effort) effectiveness. completion_tokens may be 0 when the
+ * native agent does not report usage; the analyzer falls back to output bytes. */
+static void emit_turn_metrics(TurnContext *ctx, const char *status,
+                              int prompt_tokens, int completion_tokens) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    long duration_ms = (now.tv_sec - ctx->start_ts.tv_sec) * 1000L +
+                       (now.tv_nsec - ctx->start_ts.tv_nsec) / 1000000L;
+    if (duration_ms < 0) duration_ms = 0;
+    size_t output_bytes = ctx->out_buf ? strlen(ctx->out_buf) : 0;
+    const char *effort = (ctx->reasoning_effort && ctx->reasoning_effort[0])
+                             ? ctx->reasoning_effort : "default";
+    debug_trace_append("turn_metrics request=%lu status=%s effort=%s duration_ms=%ld "
+                       "output_bytes=%zu prompt_tokens=%d completion_tokens=%d tool_calls=%d",
+                       ctx->request_number, status, effort, duration_ms,
+                       output_bytes, prompt_tokens, completion_tokens, ctx->tool_calls);
 }
 
 /* -------------------------------------------------------------------
@@ -476,6 +498,7 @@ bool turn_process_events(TurnContext *ctx) {
                 snprintf(ctx->out_buf, ctx->out_max, "cancelled");
                 debug_trace_append("native_to_bridge request=%lu status=cancelled_by_client",
                                    ctx->request_number);
+                emit_turn_metrics(ctx, "cancelled", 0, 0);
                 return false;
             }
         }
@@ -496,6 +519,7 @@ bool turn_process_events(TurnContext *ctx) {
                 debug_trace_append("native_to_bridge request=%lu status=timeout timeout_ms=%d",
                                     ctx->request_number, eng->cfg->response_timeout_ms);
                 engine_send_error(eng, "handshake_timeout", "native agent response timeout");
+                emit_turn_metrics(ctx, "timeout", 0, 0);
                 return false;
             }
             continue;
@@ -611,12 +635,14 @@ bool turn_process_events(TurnContext *ctx) {
             debug_trace_append("native_to_bridge request=%lu status=error message=\"%s\"",
                                ctx->request_number, msg);
             free(resp);
+            emit_turn_metrics(ctx, "error", 0, 0);
             return false;
         }
 
         /* Tool intent handling */
         if (ev.type == NATIVE_EVENT_TOOL_INTENT) {
             tool_cycles++;
+            ctx->tool_calls++;
             if (tool_cycles > MAX_TOOL_CYCLES) {
                 snprintf(ctx->out_buf, ctx->out_max, "native agent tool cycle limit exceeded");
                 debug_trace_append("native_to_bridge request=%lu status=tool_cycles_exceeded", ctx->request_number);
@@ -732,6 +758,8 @@ bool turn_process_events(TurnContext *ctx) {
                     }
                 }
             }
+            emit_turn_metrics(ctx, "completed", ev.data.response.prompt_tokens,
+                              ev.data.response.completion_tokens);
             return true;
         } else {
             size_t ti = 0;
@@ -753,6 +781,7 @@ bool turn_process_events(TurnContext *ctx) {
     debug_trace_append("native_to_bridge request=%lu status=event_limit_exceeded events=%d partial=%.200s",
                        ctx->request_number, event_count, ctx->out_buf);
     ctx->event_limit_exceeded = true;
+    emit_turn_metrics(ctx, "incomplete", 0, 0);
     return true;
 }
 

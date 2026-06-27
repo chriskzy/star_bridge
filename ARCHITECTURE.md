@@ -80,6 +80,16 @@ session state and switches to the target (`engine_switch_session_state`), emitti
 - **Turn events**: at `max_turn_events` the turn **completes with partial output** and
   `incomplete_details=max_turn_events` instead of failing.
 
+## Turn metrics (analytics)
+
+Every turn terminal in `turn_process_events` emits one `turn_metrics` trace line —
+`request`, `status` (completed/incomplete/error/timeout/cancelled), `effort`
+(reasoning level), `duration_ms` (CLOCK_MONOTONIC start→end), `output_bytes`,
+`prompt_tokens`/`completion_tokens` (from the native agent's reported usage, 0 if
+not reported), and `tool_calls`. `scripts/analytics.py` parses these into a
+performance + steering report. This is the single instrumentation point for
+latency/throughput/steering analysis; keep new turn-exit paths emitting it.
+
 ## Reasoning effort = agent restart
 
 Changing reasoning effort restarts ds4: the wrapper saves the session, relaunches ds4

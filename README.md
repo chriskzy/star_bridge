@@ -39,7 +39,7 @@ Star Bridge is a small native gateway that exposes the OpenAI Responses API shap
 
 - macOS or Linux with a C11 compiler, `make`, and `zlib`.
 - Python 3.14 preferred for the wrapper virtualenv; the setup script falls back to available Python where possible.
-- DwarfStar/ds4 `ds4-agent` installed locally for real-agent use.
+- ds4 `ds4-agent` (the native agent) installed locally for real-agent use.
 - Node.js is not required — browser/search tooling is not supported by the bridge; the agent handles browsing natively.
 - Codex desktop app configured with a local custom provider.
 
@@ -126,6 +126,29 @@ Every flag the binary accepts (`./bin/star_bridge --help`) is documented here:
 --help                            Print help and exit
 ```
 
+## Docker
+
+The image builds the bridge binary and bundles the Python wrapper plus a fake agent,
+so it runs a working demo out of the box:
+
+```sh
+docker build -t star-bridge .
+docker run --rm -p 8080:8080 star-bridge
+curl http://localhost:8080/v1/models      # -> star-bridge-ds4
+```
+
+`docker compose up` does the same and exposes a healthcheck on `:8080`.
+
+A real ds4 agent needs a model file that does not ship in the image, so mount the agent
+and override the command:
+
+```sh
+docker run --rm -p 9033:9033 \
+  -v /path/to/ds4-agent:/agent/ds4-agent \
+  -v /path/to/workspace:/workspace \
+  star-bridge /agent/ds4-agent /workspace -p 9033 --framed
+```
+
 ## Codex Configuration
 
 You can generate local Codex config artifacts:
@@ -154,6 +177,24 @@ name = "Star Bridge Local"
 base_url = "http://127.0.0.1:9033/v1"
 wire_api = "responses"
 ```
+
+## Analytics
+
+Each turn emits a structured `turn_metrics` line to the debug trace (enable with
+`trace=true`, `debug_log=true`). `scripts/analytics.py` aggregates them into a
+performance + steering report:
+
+```sh
+./bin/star_bridge /path/to/ds4-agent /workspace -p 9033   # run with trace/debug_log on
+python3 scripts/analytics.py .codex-bridge-debug.log       # or --json
+```
+
+It reports average time-to-complete, throughput (tokens/sec — measured from the
+agent's reported usage, or estimated from output bytes when usage is absent),
+outcome counts, tool-call totals, and a per-`reasoning_effort` breakdown (latency,
+tk/s, completion rate, tools/turn) so you can see which thinking level
+(`low`/`medium`/`high`) is actually working. Steering comparison needs turns at
+more than one effort level; with a single level it says so.
 
 ## Behavior notes
 

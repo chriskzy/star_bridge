@@ -10,8 +10,9 @@ PY="$ROOT/.venv/bin/python3"
 [[ -x "$PY" ]] || { echo "FAIL: .venv/bin/python3 missing"; exit 1; }
 
 VER="$("$PY" --version 2>&1)"
-echo "$VER" | grep -q 'Python 3\.14\.' || {
-  echo "FAIL: expected Python 3.14.x, got: $VER"
+# 3.14 is preferred but the setup script falls back to any python3.x — accept any.
+echo "$VER" | grep -qE 'Python 3\.([89]|1[0-9])\.' || {
+  echo "FAIL: expected a Python 3.x venv, got: $VER"
   exit 1
 }
 

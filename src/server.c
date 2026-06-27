@@ -485,59 +485,10 @@ void send_http(int fd, const char *status, const char *content_type, const char 
     write_all(fd, body, body_len);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Helper: gzip compress data                                        */
-/* ------------------------------------------------------------------ */
-static char *gzip_compress_srv(const char *data, size_t input_len, size_t *out_len) {
-    if (!data || input_len == 0) return NULL;
-    z_stream strm;
-    memset(&strm, 0, sizeof(strm));
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    int ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
-    if (ret != Z_OK) return NULL;
-    size_t max_compressed = input_len + 128 + (input_len / 100) + 32;
-    char *compressed = malloc(max_compressed);
-    if (!compressed) { deflateEnd(&strm); return NULL; }
-    strm.next_in = (Bytef *)data;
-    strm.avail_in = (uInt)input_len;
-    strm.next_out = (unsigned char *)compressed;
-    strm.avail_out = (uInt)max_compressed;
-    ret = deflate(&strm, Z_FINISH);
-    if (ret != Z_STREAM_END) {
-        deflateEnd(&strm);
-        free(compressed);
-        return NULL;
-    }
-    *out_len = strm.total_out;
-    deflateEnd(&strm);
-    return compressed;
-}
-
-/* Send SSE event — no truncation; writes directly */
+/* Send SSE event — no truncation; writes directly.
+ * SSE is sent uncompressed: per-field gzip into a text/event-stream `data:`
+ * field is invalid framing (binary/NUL bytes) and was removed. */
 void send_sse(int fd, const char *event_type, const char *data, int seq) {
-    /* If gzip is globally enabled and data is large enough, compress */
-    if (g_gzip_supported && data && strlen(data) > 256) {
-        size_t input_len = strlen(data);
-        size_t compressed_len = 0;
-        char *compressed = gzip_compress_srv(data, input_len, &compressed_len);
-        if (compressed && compressed_len > 0) {
-            size_t total_bytes = 0;
-            if (event_type && event_type[0]) {
-                write_all(fd, "event: ", 7); total_bytes += 7;
-                write_all(fd, event_type, strlen(event_type)); total_bytes += strlen(event_type);
-                write_all(fd, "\n", 1); total_bytes += 1;
-            }
-            write_all(fd, "data: ", 6); total_bytes += 6;
-            write_all(fd, compressed, compressed_len); total_bytes += compressed_len;
-            write_all(fd, "\n\n", 2); total_bytes += 2;
-            free(compressed);
-            fprintf(stderr, "sse event=%s bytes=%zu data_len=%zu compressed_len=%zu seq=%d gzip=1\n",
-                    event_type ? event_type : "", total_bytes, input_len, compressed_len, seq);
-            return;
-        }
-    }
     size_t total_bytes = 0;
     if (event_type && event_type[0]) {
         /* Write event: <type>\n */
@@ -1877,9 +1828,7 @@ static void handle_response(int fd, BridgeEngine *eng, const char *raw_request, 
                 int n = snprintf(sse_hdr, sizeof(sse_hdr),
                          "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
                          "Cache-Control: no-cache\r\nConnection: keep-alive\r\n"
-                         "%s"
-                         "Access-Control-Allow-Origin: *\r\n\r\n",
-                         g_gzip_supported ? "Content-Encoding: gzip\r\n" : "");
+                         "Access-Control-Allow-Origin: *\r\n\r\n");
                 if (n > 0 && (size_t)n < sizeof(sse_hdr))
                     write_all(fd, sse_hdr, (size_t)n);
                 HarnessStreamEvent event;

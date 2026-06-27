@@ -22,8 +22,12 @@ for f in $HELP_FLAGS; do
   fi
 done
 
-# Direction 2: every long flag mentioned in README exists in --help (no stale docs).
-README_FLAGS=$(grep -oE -- '--[a-z][a-z-]+' "$README" | sort -u)
+# Direction 2: every long flag in the README CLI reference block exists in --help
+# (no stale docs). Scoped to the "### CLI reference" fenced block so unrelated
+# tooling flags elsewhere in the README (e.g. `docker run --rm`) are not treated
+# as bridge flags.
+CLI_REF=$(awk '/^### CLI reference/{f=1} f; /^## /{if(f && !/^### CLI reference/) exit}' "$README")
+README_FLAGS=$(printf '%s\n' "$CLI_REF" | grep -oE -- '--[a-z][a-z-]+' | sort -u)
 for f in $README_FLAGS; do
   if printf '%s\n' "$HELP" | grep -q -- "$f"; then
     :

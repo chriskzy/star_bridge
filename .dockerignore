@@ -9,6 +9,9 @@
 *.out
 bin/
 tests/
+# Re-include the bundled demo agent the runtime image needs.
+!tests/fake_agent.py
+!tests/fake_agent.sh
 logs/
 .venv/
 vendor/unity/

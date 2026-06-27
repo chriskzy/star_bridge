@@ -6,73 +6,18 @@
 #include <time.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <zlib.h>
 
-/* ------------------------------------------------------------------ */
-/*  Helper: gzip compress data                                        */
-/* ------------------------------------------------------------------ */
-static char *gzip_compress(const char *data, size_t input_len, size_t *out_len) {
-    if (!data || input_len == 0) return NULL;
-    z_stream strm;
-    memset(&strm, 0, sizeof(strm));
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    int ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
-    if (ret != Z_OK) return NULL;
-    size_t max_compressed = input_len + 128 + (input_len / 100) + 32;
-    char *compressed = malloc(max_compressed);
-    if (!compressed) { deflateEnd(&strm); return NULL; }
-    strm.next_in = (Bytef *)data;
-    strm.avail_in = (uInt)input_len;
-    strm.next_out = (unsigned char *)compressed;
-    strm.avail_out = (uInt)max_compressed;
-    ret = deflate(&strm, Z_FINISH);
-    if (ret != Z_STREAM_END) {
-        deflateEnd(&strm);
-        free(compressed);
-        return NULL;
-    }
-    *out_len = strm.total_out;
-    deflateEnd(&strm);
-    return compressed;
-}
-
-/* Gzip flag for SSE sending */
-static bool gzip_send_enabled = false;
-
-/* Enable gzip compression for subsequent send_sse_event calls */
-void responses_stream_set_gzip(bool enabled) {
-    gzip_send_enabled = enabled;
-}
+/* NOTE: SSE responses are sent uncompressed. A previous implementation gzip-
+ * compressed individual `data:` payloads and inlined the raw bytes — that is
+ * invalid: gzip output contains NUL bytes (so the `%s` formatting truncated it)
+ * and embedding binary in an SSE `data:` field breaks the text/event-stream
+ * framing, while also mismatching the single Content-Encoding: gzip header.
+ * Event payloads are small text; compression is removed rather than reworked. */
 
 /* ------------------------------------------------------------------ */
 /*  Helper: send a single SSE event                                   */
 /* ------------------------------------------------------------------ */
 static bool send_sse_event(int fd, const char *event, const char *data, int seq) {
-    /* If gzip is enabled and data is large enough, compress the data */
-    if (gzip_send_enabled && data && strlen(data) > 256) {
-        size_t input_len = strlen(data);
-        size_t compressed_len = 0;
-        char *compressed = gzip_compress(data, input_len, &compressed_len);
-        if (compressed && compressed_len > 0) {
-            char buf[131072 + 128];
-            int n = snprintf(buf, sizeof(buf),
-                             "event: %s\ndata: %s\n\n", event ? event : "",
-                             compressed);
-            free(compressed);
-            if (n <= 0) return false;
-            if ((size_t)n > sizeof(buf)) n = (int)sizeof(buf) - 1;
-            ssize_t written = write(fd, buf, (size_t)n);
-            fprintf(stderr, "sse event=%s bytes=%zd data_len=%zu compressed_len=%zu seq=%d gzip=1\n",
-                    event ? event : "",
-                    written > 0 ? written : 0,
-                    input_len,
-                    compressed_len,
-                    seq);
-            return written == n;
-        }
-    }
     char buf[131072 + 128];
     int n = snprintf(buf, sizeof(buf),
                      "event: %s\ndata: %s\n\n", event ? event : "",
@@ -125,9 +70,7 @@ bool responses_stream_send_headers(ResponsesStreamState *s) {
     int n = snprintf(hdr, sizeof(hdr),
                      "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
                      "Cache-Control: no-cache\r\nConnection: keep-alive\r\n"
-                     "%s"
-                     "Access-Control-Allow-Origin: *\r\n\r\n",
-                     s->gzip_supported ? "Content-Encoding: gzip\r\n" : "");
+                     "Access-Control-Allow-Origin: *\r\n\r\n");
     if (n <= 0 || (size_t)n >= sizeof(hdr)) return false;
     ssize_t w = write(s->fd, hdr, (size_t)n);
     if (w != (ssize_t)n) return false;
@@ -140,7 +83,6 @@ bool responses_stream_emit_created(ResponsesStreamState *s) {
     HarnessStreamEvent event;
     codex_stream_created(s->id, s->model, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
     return true;
@@ -152,7 +94,6 @@ bool responses_stream_emit_output_item_added(ResponsesStreamState *s) {
     HarnessStreamEvent event;
     codex_stream_output_item_added(s->id, idx, s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
 
@@ -178,7 +119,6 @@ bool responses_stream_emit_content_part_added(ResponsesStreamState *s,
     codex_stream_content_part_added(s->id, s->cur_item, idx,
                                      s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
 
@@ -204,7 +144,6 @@ bool responses_stream_emit_text_delta(ResponsesStreamState *s,
                                     s->cur_item, s->cur_part,
                                     s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
 
     /* Accumulate text in part */
@@ -233,7 +172,6 @@ bool responses_stream_emit_reasoning_delta(ResponsesStreamState *s,
              "\"output_index\":%d,\"content_index\":%d,\"delta\":\"%s\","
              "\"sequence_number\":%d}",
              item->id, s->cur_item, s->cur_part, escaped, seq);
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, "reasoning_summary.delta", buf, seq);
 
     /* Accumulate */
@@ -262,7 +200,6 @@ bool responses_stream_emit_function_call_delta(ResponsesStreamState *s,
              "\"output_index\":%d,\"content_index\":%d,\"delta\":\"%s\","
              "\"sequence_number\":%d}",
              item->id, s->cur_item, s->cur_part, escaped, seq);
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, "function_call_arguments.delta", buf, seq);
 
     /* Accumulate */
@@ -285,7 +222,6 @@ bool responses_stream_emit_text_done(ResponsesStreamState *s) {
                                    s->cur_item, s->cur_part,
                                    s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
     return true;
@@ -301,7 +237,6 @@ bool responses_stream_emit_content_part_done(ResponsesStreamState *s) {
                                     s->cur_item, s->cur_part,
                                     s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
     return true;
@@ -315,7 +250,6 @@ bool responses_stream_emit_output_item_done(ResponsesStreamState *s) {
     codex_stream_output_item_done(s->id, item->parts[0].text,
                                    s->cur_item, s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
 
@@ -338,7 +272,6 @@ bool responses_stream_emit_completed(ResponsesStreamState *s) {
                             incomplete,
                             &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
 
@@ -355,7 +288,6 @@ bool responses_stream_emit_error(ResponsesStreamState *s,
     HarnessStreamEvent event;
     codex_stream_error(s->id, error_message, s->sequence_number, &event);
     int seq = s->sequence_number++;
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, event.event, event.data, seq);
     send_heartbeat(s->fd);
 
@@ -377,7 +309,6 @@ bool responses_stream_emit_failed(ResponsesStreamState *s,
              "\"status\":\"failed\"},\"error\":{\"code\":\"%s\",\"message\":\"%s\"},"
              "\"sequence_number\":%d}",
              s->id, escaped, escaped, seq);
-    gzip_send_enabled = s->gzip_supported;
     send_sse_event(s->fd, "response.failed", data, seq);
     send_heartbeat(s->fd);
     snprintf(s->error_message, sizeof(s->error_message), "%s", r);

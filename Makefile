@@ -127,6 +127,7 @@ test: venv $(TARGET) tests/test_codex_shim_regression bin/test_capability_routin
 	bash tests/test_large_input.sh
 	bash tests/test_event_cap.sh
 	bash tests/test_stream_lifecycle_golden.sh
+	bash tests/test_sse_no_gzip.sh
 	bash tests/test_turn_context.sh
 	bash tests/test_output_truncation.sh
 	bash tests/test_models_during_turn.sh
@@ -134,6 +135,7 @@ test: venv $(TARGET) tests/test_codex_shim_regression bin/test_capability_routin
 	bash tests/test_doctor.sh
 	bash tests/test_error_after_ack.sh
 	bash tests/test_readme_flags.sh
+	bash tests/test_analytics.sh
 	bash tests/test_session_interleave.sh
 	./tests/test_codex_shim_regression
 	$(MAKE) bin/test_capability_routing
@@ -219,6 +221,7 @@ ci: venv $(TARGET) tests/config_validation_test tests/test_codex_shim_regression
 	bash tests/test_large_input.sh
 	bash tests/test_event_cap.sh
 	bash tests/test_stream_lifecycle_golden.sh
+	bash tests/test_sse_no_gzip.sh
 	bash tests/test_turn_context.sh
 	bash tests/test_output_truncation.sh
 	bash tests/test_models_during_turn.sh
@@ -226,6 +229,7 @@ ci: venv $(TARGET) tests/config_validation_test tests/test_codex_shim_regression
 	bash tests/test_doctor.sh
 	bash tests/test_error_after_ack.sh
 	bash tests/test_readme_flags.sh
+	bash tests/test_analytics.sh
 	bash tests/test_session_interleave.sh
 	./tests/test_codex_shim_regression
 	$(MAKE) bin/test_capability_routing

@@ -564,15 +564,14 @@ int main(int argc, char *argv[]) {
      * Only set if not already defined in the environment. */
     {
         const char *proxy_bypass = "127.0.0.1,localhost,::1";
+        /* Use setenv (copies the value) rather than putenv with a stack buffer:
+         * putenv keeps the caller's pointer, which would dangle once these scopes
+         * exit. setenv with overwrite=0 preserves any value already in the env. */
         if (!getenv("NO_PROXY")) {
-            char buf[1024];
-            snprintf(buf, sizeof(buf), "NO_PROXY=%s", proxy_bypass);
-            putenv(buf);
+            setenv("NO_PROXY", proxy_bypass, 0);
         }
         if (!getenv("no_proxy")) {
-            char buf[1024];
-            snprintf(buf, sizeof(buf), "no_proxy=%s", proxy_bypass);
-            putenv(buf);
+            setenv("no_proxy", proxy_bypass, 0);
         }
         debug_trace_append("loopback_proxy_bypass NO_PROXY=%s no_proxy=%s",
                            getenv("NO_PROXY") ? getenv("NO_PROXY") : "(unset)",

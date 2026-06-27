@@ -1,6 +1,8 @@
 #ifndef TURN_CONTEXT_H
 #define TURN_CONTEXT_H
 
+#include <time.h>
+
 #include "bridge_core.h"
 #include "responses_stream_state.h"
 #include "tool_runner.h"
@@ -37,6 +39,10 @@ typedef struct TurnContext {
     /* Flag set by turn_process_events when the event limit (max_turn_events) is reached.
      * The caller should emit response.completed with incomplete_details instead of error. */
     bool event_limit_exceeded;
+
+    /* Performance/steering analytics (emitted as a `turn_metrics` trace line). */
+    struct timespec start_ts;        /* CLOCK_MONOTONIC at turn start */
+    int tool_calls;                  /* tool intents handled this turn */
 } TurnContext;
 
 /* Initialize a TurnContext from the caller's parameters.
