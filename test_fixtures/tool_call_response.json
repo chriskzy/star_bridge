@@ -1,0 +1,40 @@
+{
+  "type": "response",
+  "id": "resp-tool-golden",
+  "object": "response",
+  "status": "completed",
+  "model": "dwarfstar-native",
+  "output": [
+    {
+      "id": "msg_0",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_call",
+          "name": "echo",
+          "arguments": "{\"text\":\"hello\"}"
+        }
+      ]
+    },
+    {
+      "id": "msg_1",
+      "type": "message",
+      "status": "completed",
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool_result",
+          "content": "hello"
+        }
+      ]
+    }
+  ],
+  "usage": null,
+  "text": {
+    "format": {
+      "type": "text"
+    }
+  }
+}

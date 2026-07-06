@@ -31,7 +31,7 @@ JSON
 FAKE_AGENT="$ROOT/tests/fake_agent.sh"
 chmod +x "$FAKE_AGENT"
 
-./bin/star_bridge "$FAKE_AGENT" . --framed -p "$PORT" >"$LOG" 2>&1 &
+./bin/star_bridge "$FAKE_AGENT" . --framed --no-config -p "$PORT" >"$LOG" 2>&1 &
 PID=$!
 
 for _ in {1..50}; do

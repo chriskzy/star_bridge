@@ -283,7 +283,7 @@ bool tool_runner_run(const char *tool_name,
     posix_spawn_file_actions_addclose(&fa, err_pipe[0]);
 #ifdef __APPLE__
     if (workspace && workspace[0]) {
-        posix_spawn_file_actions_addchdir(&fa, workspace);
+        posix_spawn_file_actions_addchdir_np(&fa, workspace);
     }
 #endif
 

@@ -22,7 +22,7 @@ TARGET="$1"
 
 # Directories shipped wholesale (test doubles/fixtures included; build output is not).
 ALLOW_DIRS=(
-  src include agent tests scripts docs vendor .github
+  src include agent tests test_fixtures scripts docs vendor .github
 )
 # Top-level files shipped if present. ARCHITECTURE.md / CONTRIBUTING.md are created
 # by D2 and copied when they exist.
@@ -47,6 +47,7 @@ for d in "${ALLOW_DIRS[@]}"; do
       --exclude '*.log' \
       --exclude '*.o' \
       --exclude '.venv' \
+      --exclude 'evidence' \
       "$ROOT/$d/" "$TARGET/$d/"
     echo "  + $d/"
   fi
@@ -79,7 +80,7 @@ fi
 # The sanitize-checking code itself contains these strings as search patterns
 # (this script and the CI gate in .github/workflows). Exclude them — they are not
 # leaked personal paths. This mirrors the CI gate's own exclusions.
-SANITIZE_EXCLUDE='(/\.git/|/\.github/|scripts/make_release_copy\.sh$)'
+SANITIZE_EXCLUDE='(/\.git/|/\.github/|scripts/make_release_copy\.sh$|scripts/sanitize_gate\.sh$|docs/star_bridge_fable_improvement_plan\.md$)'
 CHRIS=$(grep -rIl 'chriskz' "$TARGET" 2>/dev/null | grep -vE "$SANITIZE_EXCLUDE" || true)
 if [ -n "$CHRIS" ]; then
   echo "FAIL: 'chriskz' in copy: $CHRIS"; fail=1

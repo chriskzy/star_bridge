@@ -22,11 +22,16 @@ echo "=== Handshake tests ==="
 
 if [ ! -x tests/test_uds_handshake ]; then
     echo "Building test_uds_handshake..."
-    cc -Wall -Wextra -O2 -std=gnu11 -pthread -I./include \
+    cc -Wall -Wextra -O2 -std=gnu11 -pthread -I./include -I./vendor/cjson \
         -o tests/test_uds_handshake tests/test_uds_handshake.c \
-        src/native_frame.c src/native_connection.c src/uds_transport.c \
-        src/bridge_core.c src/debug_trace.c src/config_manager.c 2>/dev/null \
-        -lz
+        src/bridge_core.c src/capability_router.c src/codex_request_parser.c \
+        src/codex_response_formatter.c src/codex_stream_events.c src/codex_tool_detector.c \
+        src/codex_tool_normalizer.c src/config_manager.c src/debug_trace.c \
+        src/file_monitor_expanded.c src/json_builder.c src/json_log.c src/json_utils.c \
+        src/native_frame.c src/native_connection.c src/native_response.c src/responses_api.c \
+        src/responses_stream_state.c src/ring_buffer.c src/server.c src/tool_history.c \
+        src/tool_policy.c src/tool_runner.c src/turn_context.c src/uds_transport.c \
+        vendor/cjson/cJSON.c 2>/dev/null -lz
 fi
 
 if [ ! -x tests/test_uds_handshake ]; then

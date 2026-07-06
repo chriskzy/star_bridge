@@ -9,7 +9,7 @@ mkdir -p "$ROOT/tests/.out"
 cd "$ROOT"
 
 # Ensure the fake UDS agent binary is built
-cc -Wall -Wextra -O2 -std=gnu11 -o "$ROOT/tests/fake_uds_agent" "$ROOT/tests/fake_uds_agent.c" 2>/dev/null || true
+cc -Wall -Wextra -O2 -std=gnu11 -o "$ROOT/tests/fake_uds_agent" "$ROOT/tests/fake_uds_agent.c"
 chmod +x "$ROOT/tests/fake_uds_agent"
 
 # Start the fake UDS agent

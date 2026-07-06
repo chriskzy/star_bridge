@@ -2,6 +2,7 @@
 bin/
 *.o
 *.log
+!docs/evidence/*.log
 .smoke-server.log
 .phase1-server.log
 .phase2-server.log
@@ -19,3 +20,4 @@ tests/usage_normalization_test
 *.dSYM/
 __pycache__/
 tests/.out/
+<test>

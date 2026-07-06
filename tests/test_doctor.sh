@@ -24,6 +24,27 @@ else
   echo "$OUT"; fail "expected agent failure (rc=$RC)"
 fi
 
+# --- Case 1b: ds4-agent commit mismatch is a warning, not a hard failure ---
+FAKE_DS4_REPO="$(mktemp -d)"
+cat >"$FAKE_DS4_REPO/ds4-agent" <<'SH'
+#!/usr/bin/env bash
+echo fake ds4
+SH
+chmod +x "$FAKE_DS4_REPO/ds4-agent"
+git -C "$FAKE_DS4_REPO" init >/dev/null 2>&1
+git -C "$FAKE_DS4_REPO" add ds4-agent >/dev/null 2>&1
+git -C "$FAKE_DS4_REPO" -c user.email=test@example.invalid -c user.name=test commit -m init >/dev/null 2>&1
+set +e
+OUT=$(HOME="$(mktemp -d)" "$BIN" --doctor "$FAKE_DS4_REPO/ds4-agent" --no-config -p "$FREE_PORT" 2>&1)
+RC=$?
+set -e
+if [ "$RC" -ne 0 ] && echo "$OUT" | grep -q "DOCTOR WARN: ds4-version"; then
+  pass "ds4-agent unvalidated commit -> warning"
+else
+  echo "$OUT"; fail "expected ds4-version warning (rc=$RC)"
+fi
+rm -rf "$FAKE_DS4_REPO"
+
 # --- Case 2: occupied port → names 'port' ---
 # Hold a port with a background listener
 HOLD_PORT=$((39000 + RANDOM % 5000))

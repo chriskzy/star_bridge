@@ -13,8 +13,8 @@ mkdir -p "$ROOT/tests/.out"
 make >/dev/null
 
 # Build the fake UDS agent if not already built
-cc -Wall -Wextra -O2 -std=gnu11 -o "$ROOT/tests/fake_uds_agent" "$ROOT/tests/fake_uds_agent.c" 2>/dev/null || true
-chmod +x "$ROOT/tests/fake_uds_agent" 2>/dev/null || true
+cc -Wall -Wextra -O2 -std=gnu11 -o "$ROOT/tests/fake_uds_agent" "$ROOT/tests/fake_uds_agent.c"
+chmod +x "$ROOT/tests/fake_uds_agent"
 
 echo "=== Test 1: Oversized frame via UDS is rejected ==="
 SOCKET1="$(pwd)/.frame_too_large_test_1.sock"
@@ -59,6 +59,8 @@ try:
 except socket.timeout:
     print('Timeout waiting for response (expected: connection closed by peer)')
     pass
+except (ConnectionResetError, BrokenPipeError, OSError):
+    pass
 
 print('PASS')
 s.close()
@@ -101,6 +103,8 @@ try:
         print('FAIL: got data on oversized frame')
         sys.exit(1)
 except socket.timeout:
+    pass
+except (ConnectionResetError, BrokenPipeError, OSError):
     pass
 print('Connection closed as expected')
 s.close()

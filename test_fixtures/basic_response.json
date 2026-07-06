@@ -1,0 +1,27 @@
+{
+  "type": "response",
+  "id": "resp-golden",
+  "object": "response",
+  "status": "completed",
+  "model": "dwarfstar-native",
+  "output": [
+    {
+      "id": "msg_0",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Hello world"
+        }
+      ]
+    }
+  ],
+  "usage": null,
+  "text": {
+    "format": {
+      "type": "text"
+    }
+  }
+}

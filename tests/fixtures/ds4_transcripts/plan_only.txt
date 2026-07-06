@@ -1,0 +1,3 @@
+The user wants me to review a repository folder. Let me explore it thoroughly.
+
+Let me explore the project more deeply to understand its structure, key source files, tests, and overall state.

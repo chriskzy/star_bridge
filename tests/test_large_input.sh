@@ -28,7 +28,7 @@ chmod +x "$FAKE_AGENT"
 
 # Start bridge with FAKE_AGENT_ECHO_INPUT_STATS so the agent echoes byte stats
 FAKE_AGENT_ECHO_INPUT_STATS=1 \
-  ./bin/star_bridge "$FAKE_AGENT" . --framed -p "$PORT" >"$LOG" 2>&1 &
+  ./bin/star_bridge "$FAKE_AGENT" . --framed --no-config -p "$PORT" >"$LOG" 2>&1 &
 PID=$!
 trap 'kill "$PID" >/dev/null 2>&1 || true; wait "$PID" >/dev/null 2>&1 || true' EXIT
 

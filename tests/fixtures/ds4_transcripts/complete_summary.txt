@@ -1,0 +1,9 @@
+## Intent of the project/folder
+This bridge exposes a local native ds4 agent through a Responses-shaped HTTP API.
+
+## Current state
+Key files read: README.md, agent/ds4_wrapper.py, src/server.c, tests/.
+
+## Potential improvements
+1. Fault injection suite - Effort: Medium, Benefit: High
+2. Second harness contract proof - Effort: Low, Benefit: High

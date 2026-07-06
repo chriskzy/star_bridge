@@ -12,10 +12,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/wait.h>
 
 #define MAX_AGENT_ARGV 64
 
 #define STAR_BRIDGE_CLI_VERSION "0.1.0-alpha"
+#define STAR_BRIDGE_VALIDATED_DS4_COMMIT "d881f2a05e8f"
+
+static const char *path_basename(const char *path);
 
 static void print_version(void) {
     fprintf(stdout, "star_bridge version %s\n", STAR_BRIDGE_CLI_VERSION);
@@ -26,6 +30,54 @@ static void print_version(void) {
 static int doctor_fail(const char *check, const char *detail) {
     fprintf(stderr, "DOCTOR FAIL: %s — %s\n", check, detail);
     return EXIT_FAILURE;
+}
+
+static int capture_git_head_short(const char *repo_dir, char *dest, size_t dest_len) {
+    if (!repo_dir || !repo_dir[0] || !dest || dest_len == 0) return 0;
+    int pipefd[2];
+    if (pipe(pipefd) != 0) return 0;
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return 0;
+    }
+    if (pid == 0) {
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+        execlp("git", "git", "-C", repo_dir, "rev-parse", "--short=12", "HEAD", (char *)NULL);
+        _exit(127);
+    }
+    close(pipefd[1]);
+    ssize_t n = read(pipefd[0], dest, dest_len - 1);
+    close(pipefd[0]);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (n <= 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        dest[0] = '\0';
+        return 0;
+    }
+    dest[n] = '\0';
+    dest[strcspn(dest, "\r\n")] = '\0';
+    return dest[0] != '\0';
+}
+
+static void agent_dirname(const char *agent_path, char *dest, size_t dest_len) {
+    if (!dest || dest_len == 0) return;
+    dest[0] = '\0';
+    if (!agent_path || !agent_path[0]) return;
+    snprintf(dest, dest_len, "%s", agent_path);
+    char *slash = strrchr(dest, '/');
+    if (slash) {
+        if (slash == dest) {
+            slash[1] = '\0';
+        } else {
+            *slash = '\0';
+        }
+    } else {
+        snprintf(dest, dest_len, ".");
+    }
 }
 
 static int run_doctor(const char *agent_path, const char *config_path,
@@ -48,6 +100,24 @@ static int run_doctor(const char *agent_path, const char *config_path,
             return doctor_fail("agent", agent_path);
         }
         fprintf(stdout, "DOCTOR OK: agent (%s)\n", agent_path);
+        if (strcmp(path_basename(agent_path), "ds4-agent") == 0) {
+            char dir[1024];
+            char commit[64];
+            agent_dirname(agent_path, dir, sizeof(dir));
+            if (capture_git_head_short(dir, commit, sizeof(commit))) {
+                if (strcmp(commit, STAR_BRIDGE_VALIDATED_DS4_COMMIT) == 0) {
+                    fprintf(stdout, "DOCTOR OK: ds4-version (validated commit %s)\n", commit);
+                } else {
+                    fprintf(stdout,
+                            "DOCTOR WARN: ds4-version — detected commit %s; validated against %s\n",
+                            commit, STAR_BRIDGE_VALIDATED_DS4_COMMIT);
+                }
+            } else {
+                fprintf(stdout,
+                        "DOCTOR WARN: ds4-version — unable to detect git commit; validated against %s\n",
+                        STAR_BRIDGE_VALIDATED_DS4_COMMIT);
+            }
+        }
     }
 
     /* 3. wrapper venv OK */

@@ -1,0 +1,8 @@
+running
+Saved session kv-9f3a2b to ~/.ds4/kvcache
+ready
+---
+session saved: ds4_20260706_184455
++DWARFSTAR_WAITING
+---
+Saved context as cache-42_alpha under local kvcache

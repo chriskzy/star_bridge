@@ -15,6 +15,7 @@ Star Bridge is a small native gateway that exposes the OpenAI Responses API shap
 - Supports stdio framed transport and Unix domain socket transport.
 - Auto-detects `ds4-agent` and uses the Python wrapper for ds4 non-interactive mode.
 - Streams assistant text, structured errors, and completion events back to Codex.
+- Documents the supported harness HTTP contract in [`docs/HARNESS_CONTRACT.md`](docs/HARNESS_CONTRACT.md).
 - Supports session state frames and workspace-root injection.
 - Provides policy-gated tool intent handling; browser/search execution stays with the native agent.
 - Includes request validation, auth token checks, logging, debug traces, and regression tests.
@@ -42,6 +43,11 @@ Star Bridge is a small native gateway that exposes the OpenAI Responses API shap
 - ds4 `ds4-agent` (the native agent) installed locally for real-agent use.
 - Node.js is not required — browser/search tooling is not supported by the bridge; the agent handles browsing natively.
 - Codex desktop app configured with a local custom provider.
+
+Real-agent validation currently pins ds4 by source checkout commit. The live smoke on
+2026-07-05 passed against ds4 commit `d881f2a05e8f`; `--doctor /path/to/ds4-agent`
+prints `DOCTOR OK: ds4-version` for that commit and a warning for any other detected
+ds4 checkout.
 
 The build vendors cJSON in `vendor/cjson/` when no system cJSON is available. cJSON is
 © 2009–2017 Dave Gamble and cJSON contributors, MIT-licensed; see

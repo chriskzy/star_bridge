@@ -12,7 +12,7 @@ trap "rm -rf $OUTDIR" EXIT
 cd "$(dirname "$0")/.." || exit 1
 
 echo "=== Test: --generate-config writes catalog and provider ==="
-./bin/star_bridge --generate-config "$OUTDIR" 2>&1
+./bin/star_bridge --no-config --generate-config "$OUTDIR" 2>&1
 
 if [ ! -f "$OUTDIR/custom_model_catalog.json" ]; then
     echo "FAIL: custom_model_catalog.json not found"
@@ -65,7 +65,7 @@ echo "=== Test: --generate-config without arg uses current dir ==="
 TMPDIR=$(mktemp -d /tmp/star_bridge_config_gen_XXXXXX)
 trap "rm -rf $TMPDIR" EXIT
 cd "$TMPDIR"
-"$OLDPWD/bin/star_bridge" --generate-config 2>&1
+"$OLDPWD/bin/star_bridge" --no-config --generate-config 2>&1
 if [ ! -f custom_model_catalog.json ]; then
     echo "FAIL: no file in current dir"
     exit 1
@@ -76,7 +76,7 @@ cd "$OLDPWD"
 echo "=== TDD RED case: --generate-config on fresh non-existing dir must succeed (mkdir inside) ==="
 FRESHDIR="/tmp/star_bridge_fresh_gen_$$_$(date +%s)"
 rm -rf "$FRESHDIR"
-./bin/star_bridge --generate-config "$FRESHDIR" 2>&1 || {
+./bin/star_bridge --no-config --generate-config "$FRESHDIR" 2>&1 || {
     echo "RED: generate failed on non-existing dir (no mkdir -p)"
     ls -ld "$FRESHDIR" 2>/dev/null || true
     exit 1
@@ -89,7 +89,7 @@ echo "temp files created, will cleanup"
 rm -rf "$FRESHDIR"
 
 echo "=== Test: --generate-config with invalid path ==="
-./bin/star_bridge --generate-config /nonexistent/dir 2>&1 && {
+./bin/star_bridge --no-config --generate-config /nonexistent/dir 2>&1 && {
     echo "FAIL: should have failed on invalid path"
     exit 1
 } || true

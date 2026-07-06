@@ -4,10 +4,10 @@ DEBUG_CFLAGS ?= -Wall -Wextra -g -O0 -std=gnu11 -pthread -I./include -DDEBUG
 TARGET := bin/star_bridge
 COMPAT_TARGET := bin/codex_bridge
 DEBUG_TARGET := bin/star_bridge_debug
-SRC := src/main.c src/bridge_core.c src/capability_router.c src/codex_request_parser.c src/codex_response_formatter.c src/codex_stream_events.c src/codex_tool_detector.c src/codex_tool_normalizer.c src/config_manager.c src/debug_trace.c src/file_monitor_expanded.c src/json_builder.c src/json_log.c src/json_utils.c src/native_frame.c src/native_connection.c src/native_response.c src/plugin_registry.c src/plugin_example.c src/responses_api.c src/responses_stream_state.c src/ring_buffer.c src/server.c src/structural_overlay.c src/tool_history.c src/tool_policy.c src/tool_runner.c src/turn_context.c src/uds_transport.c
+SRC := src/main.c src/bridge_core.c src/capability_router.c src/codex_request_parser.c src/codex_response_formatter.c src/codex_stream_events.c src/codex_tool_detector.c src/codex_tool_normalizer.c src/config_manager.c src/debug_trace.c src/file_monitor_expanded.c src/json_builder.c src/json_log.c src/json_utils.c src/native_frame.c src/native_connection.c src/native_response.c src/responses_api.c src/responses_stream_state.c src/ring_buffer.c src/server.c src/tool_history.c src/tool_policy.c src/tool_runner.c src/turn_context.c src/uds_transport.c
 VENDOR_CJSON := vendor/cjson/cJSON.c
 
-.PHONY: all clean test debug venv test-runner test-config-validation test-usage-normalization test-codex-shim-regression test-native-response-parser
+.PHONY: all clean test debug venv test-runner test-config-validation test-usage-normalization test-codex-shim-regression test-native-response-parser sanitize
 
 .DEFAULT_GOAL := all
 
@@ -134,6 +134,8 @@ test: venv $(TARGET) tests/test_codex_shim_regression bin/test_capability_routin
 	bash tests/test_cancel_mid_turn.sh
 	bash tests/test_doctor.sh
 	bash tests/test_error_after_ack.sh
+	bash tests/test_phase2_fault_injection.sh
+	bash tests/test_second_harness_openai_sdk.sh
 	bash tests/test_readme_flags.sh
 	bash tests/test_analytics.sh
 	bash tests/test_session_interleave.sh
@@ -176,7 +178,7 @@ test-codex-shim-regression: tests/test_codex_shim_regression
 	./tests/test_codex_shim_regression
 
 # CI target — build and run a curated set of fast regression tests
-ci: venv $(TARGET) tests/config_validation_test tests/test_codex_shim_regression bin/test_capability_routing tests/test_native_response_parser
+ci: sanitize venv $(TARGET) tests/config_validation_test tests/test_codex_shim_regression bin/test_capability_routing tests/test_native_response_parser
 	mkdir -p tests/.out
 	bash tests/test_star_bridge_binary.sh
 	bash tests/test_auth.sh
@@ -235,6 +237,7 @@ ci: venv $(TARGET) tests/config_validation_test tests/test_codex_shim_regression
 	$(MAKE) bin/test_capability_routing
 	./bin/test_capability_routing
 	bash tests/test_release_copy.sh
+	bash tests/test_hermeticity_poisoned_config.sh
 	./tests/test_native_response_parser
 	./tests/config_validation_test
 	bash tests/test_managed_config.sh
@@ -250,3 +253,6 @@ bin/test_capability_routing: tests/test_capability_routing.c src/capability_rout
 clean:
 	rm -rf bin tests/.out
 	rm -f .*.log .*_test_dir* .*_test.sock .*_test_*.*
+
+sanitize:
+	bash scripts/sanitize_gate.sh

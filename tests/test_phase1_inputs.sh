@@ -11,7 +11,7 @@ make clean >/dev/null 2>&1 || true
 mkdir -p "$ROOT/tests/.out"
 make >/dev/null
 
-./bin/star_bridge /bin/cat . --native-transport stdio -p "$PORT" >"$LOG" 2>&1 &
+./bin/star_bridge /bin/cat . --native-transport stdio --no-config -p "$PORT" >"$LOG" 2>&1 &
 PID=$!
 trap 'kill "$PID" >/dev/null 2>&1 || true; wait "$PID" >/dev/null 2>&1 || true' EXIT
 

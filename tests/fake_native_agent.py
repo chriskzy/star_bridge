@@ -16,6 +16,7 @@ import sys
 import os
 import json
 import struct
+import time
 
 def read_frame():
     """Read a length-prefixed JSON frame from stdin (little-endian)."""
@@ -34,6 +35,17 @@ def write_frame(obj):
     buf = data.encode("utf-8")
     sys.stdout.buffer.write(struct.pack("<I", len(buf)))
     sys.stdout.buffer.write(buf)
+    sys.stdout.flush()
+
+def write_raw_frame(payload):
+    """Write raw frame bytes for protocol-fault tests."""
+    sys.stdout.buffer.write(struct.pack("<I", len(payload)))
+    sys.stdout.buffer.write(payload)
+    sys.stdout.flush()
+
+def write_oversized_header():
+    """Advertise a frame larger than the bridge max without sending payload."""
+    sys.stdout.buffer.write(struct.pack("<I", 16777217))
     sys.stdout.flush()
 
 def main():
@@ -82,7 +94,10 @@ def main():
             # Send ack
             ack_id = req_id if req_id else "req-1"
             write_frame({"type": "ack", "id": ack_id, "status": "accepted"})
+            fault = os.environ.get("FAKE_NATIVE_FAULT", "")
             if os.environ.get("FAKE_NATIVE_ERROR_AFTER_ACK") == "1":
+                fault = "error_after_ack"
+            if fault == "error_after_ack":
                 # AUD3: ack, then a native error. The bridge must fail the turn
                 # immediately with a structured error, not wait for a timeout.
                 write_frame({
@@ -90,6 +105,34 @@ def main():
                     "id": ack_id,
                     "code": "native_blew_up",
                     "message": "simulated native failure after ack",
+                })
+                continue
+            if fault == "killed_mid_turn":
+                os._exit(42)
+            if fault == "garbage_frame_after_ack":
+                write_raw_frame(b"{not-json")
+                continue
+            if fault == "stall_after_ack":
+                time.sleep(10)
+                continue
+            if fault == "close_after_ack":
+                return
+            if fault == "oversized_frame_after_ack":
+                write_oversized_header()
+                continue
+            if fault == "slow_text_delta":
+                for i in range(100):
+                    write_frame({
+                        "type": "text_delta",
+                        "id": ack_id,
+                        "text": f"slow-{i} ",
+                    })
+                    time.sleep(0.05)
+                write_frame({
+                    "type": "response",
+                    "id": ack_id,
+                    "status": "completed",
+                    "output": "slow stream completed",
                 })
                 continue
             # Send response

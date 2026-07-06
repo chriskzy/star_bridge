@@ -15,6 +15,7 @@ import time
 import queue
 import threading
 import socket  # for UDS support in bridge<->wrapper framed comms
+import hashlib
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 DS4_AGENT_PATH = os.environ.get("DS4_AGENT_PATH")
@@ -51,6 +52,17 @@ _active_session_key = ""  # current active session key
 
 # Reasoning effort tracking (T2.1)
 _current_reasoning_effort = None  # current effort level for the active session
+
+
+def ds4_runtime_home():
+    """Bridge-owned HOME for ds4 so global ~/.ds4 sessions never leak in."""
+    override = os.environ.get("STAR_BRIDGE_DS4_HOME")
+    if override:
+        return override
+    parent_home = os.environ.get("HOME") or "/tmp"
+    ws = os.path.abspath(BRIDGE_WORKSPACE_ROOT or ".")
+    digest = hashlib.sha256(ws.encode("utf-8")).hexdigest()[:16]
+    return os.path.join(parent_home, ".star_bridge", "ds4-home", digest)
 
 def _setup_bridge_comm():
     """Setup UDS or stdio for bridge framed comms. Call early in main before first read_frame.
@@ -467,10 +479,11 @@ class _PtyLineReader:
 class Ds4PersistentSession:
     """Keep one ds4-agent process alive; feed prompts on stdin."""
 
-    def __init__(self, model=MODEL_PATH, ctx=CONTEXT_TOKENS, reasoning_effort=None):
+    def __init__(self, model=MODEL_PATH, ctx=CONTEXT_TOKENS, reasoning_effort=None, runtime_home=None):
         self.model = model
         self.ctx = ctx
         self.reasoning_effort = reasoning_effort
+        self.runtime_home = runtime_home
         self.proc = None
         self._stdout_reader = None
 
@@ -479,6 +492,9 @@ class Ds4PersistentSession:
         args = build_ds4_persistent_args(
             model=self.model, ctx=self.ctx, reasoning_effort=self.reasoning_effort
         )
+        runtime_home = self.runtime_home or ds4_runtime_home()
+        self.runtime_home = runtime_home
+        os.makedirs(runtime_home, exist_ok=True)
         master_fd, slave_fd = pty.openpty()
         self.proc = subprocess.Popen(
             args,
@@ -486,12 +502,12 @@ class Ds4PersistentSession:
             stdout=slave_fd,
             stderr=slave_fd,
             close_fds=True,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            env={**os.environ, "PYTHONUNBUFFERED": "1", "HOME": runtime_home},
         )
         os.close(slave_fd)
         self._stdout_reader = _PtyLineReader(master_fd)
         self._wait_until_waiting(timeout)
-        sys.stderr.write("DEBUG ds4 persistent session ready\n")
+        sys.stderr.write(f"DEBUG ds4 persistent session ready home={runtime_home}\n")
         sys.stderr.flush()
 
     def run_prompt(self, prompt, timeout=DS4_TURN_TIMEOUT):
@@ -698,6 +714,8 @@ class BridgeFrameRouter:
             ft = frame.get("type", "")
             if ft == "ping":
                 write_frame({"type": "pong", "id": frame.get("id", ""), "status": "ok"})
+            elif ft == "health":
+                write_frame({"type": "health", "id": frame.get("id", ""), "status": "ok"})
             elif ft == "error":
                 sys.stderr.write(
                     f"DEBUG ignore error frame: {frame.get('error_type','')}: {frame.get('detail','')}\n"
@@ -797,9 +815,11 @@ def apply_effort_change(current_session, reasoning_effort, context_tokens,
             sys.stderr.write(f"DEBUG /save before effort restart failed: {e}\n")
         current_session.close()
 
+    runtime_home = getattr(current_session, "runtime_home", None) if current_session is not None else None
     new_ctx = resolve_context_tokens(context_tokens)
     new_session = session_factory(model=MODEL_PATH, ctx=new_ctx,
-                                  reasoning_effort=reasoning_effort)
+                                  reasoning_effort=reasoning_effort,
+                                  runtime_home=runtime_home)
     new_session.start()
 
     if saved_sha:
@@ -884,8 +904,34 @@ def main():
                 sys.stderr.flush()
                 write_frame({"type": "ack", "id": ack_id, "status": "accepted"})
 
+                # reset_session means fresh native context. Do not save/switch the
+                # current ds4 state here; that is exactly how stale context leaks.
+                if reset_session:
+                    sys.stderr.write("DEBUG reset_session: restarting ds4 with fresh native context\n")
+                    sys.stderr.flush()
+                    if session is not None:
+                        session.close()
+                    fresh_ctx = resolve_context_tokens(context_tokens)
+                    reset_home = os.path.join(
+                        ds4_runtime_home(),
+                        "reset",
+                        f"{int(time.time() * 1000)}_{os.getpid()}",
+                    )
+                    session = Ds4PersistentSession(
+                        model=MODEL_PATH,
+                        ctx=fresh_ctx,
+                        reasoning_effort=reasoning_effort,
+                        runtime_home=reset_home,
+                    )
+                    session.start()
+                    _current_reasoning_effort = reasoning_effort
+                    sys.stderr.write(
+                        f"DEBUG reset_session: fresh ds4 ready reasoning_effort={reasoning_effort} ctx={fresh_ctx}\n"
+                    )
+                    sys.stderr.flush()
+
                 # Handle effort change: restart agent with the new thinking flag if effort changed
-                if reasoning_effort is not None and reasoning_effort != _current_reasoning_effort:
+                elif reasoning_effort is not None and reasoning_effort != _current_reasoning_effort:
                     sys.stderr.write(
                         f"DEBUG effort change: {_current_reasoning_effort} -> {reasoning_effort}\n"
                     )
@@ -926,7 +972,8 @@ def main():
                 # of whatever dir Codex Desktop had open when it built the big request context
                 # ("New project 2" etc.). The prefix goes at the very front.
                 ws = BRIDGE_WORKSPACE_ROOT or "."
-                if ws and ws != ".":
+                bool_reply_exactly = "reply exactly" in (input_text or "").lower()
+                if ws and ws != "." and not bool_reply_exactly:
                     ws_prefix = (
                         f"WORKSPACE_ROOT={ws}\n"
                         "You are operating inside this exact directory for the current task. "
@@ -937,6 +984,15 @@ def main():
                     prompt = ws_prefix + base
                 else:
                     prompt = base
+
+                # Detect review-style tasks (from the original user input) so completion
+                # forcing is applied only when the user asked for review/exploration.
+                input_lower = (input_text or "").lower()
+                review_task = (not bool_reply_exactly) and any(kw in input_lower for kw in (
+                    "review", "explore", "analyze", "analyse", "audit",
+                    "intent", "current state", "potential improvements",
+                    "effort and benefit", "effort/benefit", "effort: ", "benefit: "
+                ))
 
                 # Append synthesis / completion guidelines so that after tool use, exploration,
                 # or raw output (directory scans, file listings, etc.), the native agent continues
@@ -964,18 +1020,8 @@ def main():
                     "Stream any intermediate thinking or plan as normal, but the *final content you emit for this input* must contain the synthesized completion summary with the scored sections. "
                     "The visible answer after tools/exploration must be the structured review, not just the plan or raw scans."
                 )
-                prompt = prompt + completion_directive
-
-                # Detect review-style tasks (from the original user input) so we can be more aggressive
-                # with continuation / forcing of the full synthesis (independent of exact plan phrasing
-                # in partial outputs). This addresses cases where the first visible deltas are exactly
-                # a curtailed "Let me explore..." response, or where cont generations produce
-                # only filtered tool lines + no scored prose.
-                input_lower = (input_text or "").lower()
-                review_task = any(kw in input_lower for kw in (
-                    "review", "intent", "current state", "potential improvements",
-                    "effort and benefit", "effort/benefit", "effort: ", "benefit: "
-                ))
+                if review_task:
+                    prompt = prompt + completion_directive
 
                 # Stream deltas + periodic thinking pings for long silences.
                 # This is the key to prevent Codex "Reconnecting" during thinking.
@@ -1015,7 +1061,7 @@ def main():
                         if count < 2 or not _looks_like_complete_summary(fo):
                             return True
                     # Fallback to the plan-only heuristic for non-review or after the min.
-                    return _is_plan_only_output(fo)
+                    return (not bool_reply_exactly) and _is_plan_only_output(fo)
 
                 while _should_continue_for_review(full_output, continuation_count):
                     continuation_count += 1

@@ -1,0 +1,9 @@
+{
+  "_comment": "Current error contract: a request that fails validation (e.g. empty input) returns a non-streamed HTTP 400 with this JSON body shape. The streamed SSE variant (response.created -> response.failed) does not exist yet; it is added by T1.3 (mid-turn cancel) / T1.4 (event cap). When that lands, extend the golden test with the streamed sequence.",
+  "http_status": 400,
+  "body": {
+    "object": "response",
+    "status": "failed",
+    "error": {}
+  }
+}

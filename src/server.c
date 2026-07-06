@@ -860,7 +860,7 @@ void build_session_metadata_json(const BridgeEngine *eng, const char *last_respo
     char git_remote[256] = "";
     char git_branch[256] = "";
     char git_head[64] = "";
-    if (eng->workspace[0]) {
+    if (eng->workspace[0] && !getenv("STAR_BRIDGE_DISABLE_WORKSPACE_DIRECTIVE")) {
         /* Try git remote (safe subprocess, no shell) */
         char *argv_remote[] = {(char*)"git", (char*)"remote", (char*)"get-url", (char*)"origin", NULL};
         char line[256] = "";
@@ -1064,7 +1064,7 @@ bool handle_response_native(int fd, BridgeEngine *eng, unsigned long request_num
     input[input_len] = '\0';
 
     /* Inject workspace root directive so agent knows its working directory */
-    if (eng->workspace[0]) {
+    if (eng->workspace[0] && !getenv("STAR_BRIDGE_DISABLE_WORKSPACE_DIRECTIVE")) {
         if (input_len > 0 && input[input_len - 1] != '\n') {
             if (!dyn_append(&input, &input_cap, &input_len, "\n")) goto oom;
         }
@@ -1184,14 +1184,27 @@ bool handle_response_native(int fd, BridgeEngine *eng, unsigned long request_num
      * even if Codex request context mentions another dir ("New project 2"), the agent sees
      * the bridge-provided root for the current launch. The wrapper also
      * injects a human-readable version at the very front of what it sends to ds4 stdin. */
-    if (eng->workspace[0]) {
+    if (eng->workspace[0] && !getenv("STAR_BRIDGE_DISABLE_WORKSPACE_DIRECTIVE") &&
+        !strcasestr(input, "reply exactly")) {
+        bool wants_review_completion =
+            strcasestr(req->normalized_input, "review") ||
+            strcasestr(req->normalized_input, "explore") ||
+            strcasestr(req->normalized_input, "analyze") ||
+            strcasestr(req->normalized_input, "analyse") ||
+            strcasestr(req->normalized_input, "audit") ||
+            strcasestr(req->normalized_input, "intent") ||
+            strcasestr(req->normalized_input, "current state") ||
+            strcasestr(req->normalized_input, "improvement") ||
+            strcasestr(req->normalized_input, "score");
         if (!dyn_append(&input, &input_cap, &input_len, "workspace_root: ")) goto oom;
         if (!dyn_append(&input, &input_cap, &input_len, eng->workspace)) goto oom;
         if (!dyn_append(&input, &input_cap, &input_len, "\n")) goto oom;
         if (!dyn_append(&input, &input_cap, &input_len,
             "DIRECTIVE: All file operations, list, find, read, edit must be performed under the above workspace_root. Ignore paths from history or other projects.\n")) goto oom;
-        if (!dyn_append(&input, &input_cap, &input_len,
-            "After exploration or tool results, always continue to a full structured final answer for the original user request (e.g. review summary with intent, state, scored improvements). Do not end after raw listings.\n")) goto oom;
+        if (wants_review_completion) {
+            if (!dyn_append(&input, &input_cap, &input_len,
+                "After exploration or tool results, always continue to a full structured final answer for the original user request (e.g. review summary with intent, state, scored improvements). Do not end after raw listings.\n")) goto oom;
+        }
     }
     char normalized_sample[512];
     debug_trace_compact_text(input, normalized_sample, sizeof(normalized_sample));

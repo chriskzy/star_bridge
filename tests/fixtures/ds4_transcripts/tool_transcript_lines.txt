@@ -1,0 +1,5 @@
+🛠 list path=/tmp/example/project
+[tool call] read path=src/server.c
+$ find . -maxdepth 2 -type f
+find path=docs query=plan
+Here is the actual assistant answer.
